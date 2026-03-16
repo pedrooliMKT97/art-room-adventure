@@ -5,14 +5,15 @@ import type { GameState, ModalType } from './gameTypes';
 
 const SCALE = 4;
 const TILE = 16;
-const COLS = 14;
-const ROWS = 10;
+const COLS = 16; // Alterado para 16
+const ROWS = 9;  // Alterado para 9 (Proporção 16:9)
 const W = COLS * TILE * SCALE;
 const H = ROWS * TILE * SCALE;
 
 export default function PixelRoom() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const stateRef = useRef<GameState>({
+  // Adicione 'sitting: false' ao seu GameState (lembre-se de adicionar no gameTypes.ts também)
+  const stateRef = useRef<GameState & { sitting?: boolean }>({
     x: 6 * TILE * SCALE,
     y: 5 * TILE * SCALE,
     dir: 'down',
@@ -25,6 +26,7 @@ export default function PixelRoom() {
     curtainOffset: 0,
     cpuBlink: true,
     cpuBlinkTimer: 0,
+    sitting: false, // Novo estado
   });
   const [activeModal, setActiveModal] = useState<ModalType>(null);
   const [hoverObject, setHoverObject] = useState<string | null>(null);
