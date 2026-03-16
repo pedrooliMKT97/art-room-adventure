@@ -60,66 +60,44 @@ export default function PixelRoom() {
   }, [activeModal, closeModal]);
 
   // Canvas click → check object hit
-  const handleCanvasClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+const handleCanvasClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (activeModal) return;
     const rect = (e.target as HTMLCanvasElement).getBoundingClientRect();
     const mx = e.clientX - rect.left;
     const my = e.clientY - rect.top;
+    
     for (const obj of OBJECTS) {
       const ox = obj.tx * TILE * SCALE;
       const oy = obj.ty * TILE * SCALE;
       const ow = obj.tw * TILE * SCALE;
       const oh = obj.th * TILE * SCALE;
+      
       if (mx >= ox && mx <= ox + ow && my >= oy && my <= oy + oh) {
+        if (obj.id === 'computer') {
+          // Posiciona o personagem na cadeira e faz ele olhar para o monitor
+          stateRef.current.x = (obj.tx + 1) * TILE * SCALE; 
+          stateRef.current.y = (obj.ty + 0.5) * TILE * SCALE;
+          stateRef.current.dir = 'up';
+          stateRef.current.sitting = true;
+        }
         openModal(obj.modal as ModalType);
         return;
       }
     }
   }, [activeModal, openModal]);
 
-  // Mouse move → hover detection
-  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (activeModal) return;
-    const rect = (e.target as HTMLCanvasElement).getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
-    let found: string | null = null;
-    for (const obj of OBJECTS) {
-      const ox = obj.tx * TILE * SCALE;
-      const oy = obj.ty * TILE * SCALE;
-      const ow = obj.tw * TILE * SCALE;
-      const oh = obj.th * TILE * SCALE;
-      if (mx >= ox && mx <= ox + ow && my >= oy && my <= oy + oh) {
-        found = obj.id;
-        break;
-      }
-    }
-    setHoverObject(found);
-  }, [activeModal]);
+  // Dentro de PixelRoom.tsx -> loop (na parte de Movement)
+  let dx = 0, dy = 0;
+  if (s.keys.w) { dy = -SPEED; s.dir = 'up'; }
+  if (s.keys.s) { dy = SPEED; s.dir = 'down'; }
+  if (s.keys.a) { dx = -SPEED; s.dir = 'left'; }
+  if (s.keys.d) { dx = SPEED; s.dir = 'right'; }
+  s.moving = dx !== 0 || dy !== 0;
 
-  // Game loop
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d')!;
-
-    const SPEED = 2;
-    const CHAR_W = 2 * TILE * SCALE;
-    const CHAR_H = 2 * TILE * SCALE;
-    const WALL = TILE * SCALE;
-
-    const loop = (ts: number) => {
-      const dt = Math.min(ts - (lastTimeRef.current || ts), 50);
-      lastTimeRef.current = ts;
-      const s = stateRef.current;
-
-      // Movement
-      let dx = 0, dy = 0;
-      if (s.keys.w) { dy = -SPEED; s.dir = 'up'; }
-      if (s.keys.s) { dy = SPEED; s.dir = 'down'; }
-      if (s.keys.a) { dx = -SPEED; s.dir = 'left'; }
-      if (s.keys.d) { dx = SPEED; s.dir = 'right'; }
-      s.moving = dx !== 0 || dy !== 0;
+  // Se estiver se movendo, levanta da cadeira
+  if (s.moving && s.sitting) {
+    s.sitting = false;
+  }
 
       // Collision with walls
       let nx = s.x + dx;
