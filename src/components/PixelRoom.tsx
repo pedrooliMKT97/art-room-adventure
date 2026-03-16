@@ -1,19 +1,20 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import PixelModal from './PixelModal';
-import { OBJECTS, ROOM_CONFIG, drawRoom, drawCharacter } from './roomEngine';
+import { OBJECTS, drawRoom, drawCharacter } from './roomEngine';
 import type { GameState, ModalType } from './gameTypes';
 
 const SCALE = 4;
 const TILE = 16;
-const COLS = 16; // Alterado para 16
-const ROWS = 9;  // Alterado para 9 (Proporção 16:9)
+const COLS = 16; // Atualizado para 16:9
+const ROWS = 9;  // Atualizado para 16:9
 const W = COLS * TILE * SCALE;
 const H = ROWS * TILE * SCALE;
 
 export default function PixelRoom() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  // Adicione 'sitting: false' ao seu GameState (lembre-se de adicionar no gameTypes.ts também)
-  const stateRef = useRef<GameState & { sitting?: boolean }>({
+  
+  // Adicionamos o "sitting" no tipo para o TypeScript não reclamar
+  const stateRef = useRef<GameState & { sitting: boolean }>({
     x: 6 * TILE * SCALE,
     y: 5 * TILE * SCALE,
     dir: 'down',
@@ -26,8 +27,9 @@ export default function PixelRoom() {
     curtainOffset: 0,
     cpuBlink: true,
     cpuBlinkTimer: 0,
-    sitting: false, // Novo estado
+    sitting: false, // Inicia em pé
   });
+  
   const [activeModal, setActiveModal] = useState<ModalType>(null);
   const [hoverObject, setHoverObject] = useState<string | null>(null);
   const rafRef = useRef<number>(0);
@@ -45,7 +47,6 @@ export default function PixelRoom() {
       if (k === 'a' || k === 'arrowleft') stateRef.current.keys.a = true;
       if (k === 's' || k === 'arrowdown') stateRef.current.keys.s = true;
       if (k === 'd' || k === 'arrowright') stateRef.current.keys.d = true;
-      e.preventDefault();
     };
     const up = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase();
@@ -60,7 +61,7 @@ export default function PixelRoom() {
   }, [activeModal, closeModal]);
 
   // Canvas click → check object hit
-const handleCanvasClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+  const handleCanvasClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (activeModal) return;
     const rect = (e.target as HTMLCanvasElement).getBoundingClientRect();
     const mx = e.clientX - rect.left;
@@ -71,33 +72,72 @@ const handleCanvasClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) =
       const oy = obj.ty * TILE * SCALE;
       const ow = obj.tw * TILE * SCALE;
       const oh = obj.th * TILE * SCALE;
-      
       if (mx >= ox && mx <= ox + ow && my >= oy && my <= oy + oh) {
+        
+        // Se for o computador, faz o personagem sentar na cadeira
         if (obj.id === 'computer') {
-          // Posiciona o personagem na cadeira e faz ele olhar para o monitor
-          stateRef.current.x = (obj.tx + 1) * TILE * SCALE; 
+          stateRef.current.x = (obj.tx + 1) * TILE * SCALE;
           stateRef.current.y = (obj.ty + 0.5) * TILE * SCALE;
           stateRef.current.dir = 'up';
           stateRef.current.sitting = true;
         }
+        
         openModal(obj.modal as ModalType);
         return;
       }
     }
   }, [activeModal, openModal]);
 
-  // Dentro de PixelRoom.tsx -> loop (na parte de Movement)
-  let dx = 0, dy = 0;
-  if (s.keys.w) { dy = -SPEED; s.dir = 'up'; }
-  if (s.keys.s) { dy = SPEED; s.dir = 'down'; }
-  if (s.keys.a) { dx = -SPEED; s.dir = 'left'; }
-  if (s.keys.d) { dx = SPEED; s.dir = 'right'; }
-  s.moving = dx !== 0 || dy !== 0;
+  // Mouse move → hover detection
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (activeModal) return;
+    const rect = (e.target as HTMLCanvasElement).getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    let found: string | null = null;
+    for (const obj of OBJECTS) {
+      const ox = obj.tx * TILE * SCALE;
+      const oy = obj.ty * TILE * SCALE;
+      const ow = obj.tw * TILE * SCALE;
+      const oh = obj.th * TILE * SCALE;
+      if (mx >= ox && mx <= ox + ow && my >= oy && my <= oy + oh) {
+        found = obj.id;
+        break;
+      }
+    }
+    setHoverObject(found);
+  }, [activeModal]);
 
-  // Se estiver se movendo, levanta da cadeira
-  if (s.moving && s.sitting) {
-    s.sitting = false;
-  }
+  // Game loop
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d')!;
+
+    const SPEED = 2;
+    const CHAR_W = 2 * TILE * SCALE;
+    const CHAR_H = 2 * TILE * SCALE;
+    const WALL = TILE * SCALE;
+
+    const loop = (ts: number) => {
+      const dt = Math.min(ts - (lastTimeRef.current || ts), 50);
+      lastTimeRef.current = ts;
+      const s = stateRef.current;
+
+      // Movement
+      let dx = 0, dy = 0;
+      if (s.keys.w) { dy = -SPEED; s.dir = 'up'; }
+      if (s.keys.s) { dy = SPEED; s.dir = 'down'; }
+      if (s.keys.a) { dx = -SPEED; s.dir = 'left'; }
+      if (s.keys.d) { dx = SPEED; s.dir = 'right'; }
+      s.moving = dx !== 0 || dy !== 0;
+
+      // Se começar a andar, levanta da cadeira
+      if (s.moving && s.sitting) {
+        s.sitting = false;
+        // Joga o boneco um pouquinho pra trás pra não travar na mesa quando levantar
+        s.y += TILE * SCALE; 
+      }
 
       // Collision with walls
       let nx = s.x + dx;
@@ -109,26 +149,21 @@ const handleCanvasClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) =
       nx = Math.max(minX, Math.min(maxX, nx));
       ny = Math.max(minY, Math.min(maxY, ny));
 
-      // Collision with solid objects
-      for (const obj of OBJECTS) {
-        if (!obj.solid) continue;
-        const ox = obj.tx * TILE * SCALE;
-        const oy = obj.ty * TILE * SCALE;
-        const ow = obj.tw * TILE * SCALE;
-        const oh = obj.th * TILE * SCALE;
-        // X collision
-        if (
-          nx < ox + ow && nx + CHAR_W > ox &&
-          ny < oy + oh && ny + CHAR_H > oy
-        ) {
-          nx = s.x;
-        }
-        // Y collision
-        if (
-          s.x < ox + ow && s.x + CHAR_W > ox &&
-          ny < oy + oh && ny + CHAR_H > oy
-        ) {
-          ny = s.y;
+      // Collision with solid objects (Ignora se estiver sentado)
+      if (!s.sitting) {
+        for (const obj of OBJECTS) {
+          if (!obj.solid) continue;
+          const ox = obj.tx * TILE * SCALE;
+          const oy = obj.ty * TILE * SCALE;
+          const ow = obj.tw * TILE * SCALE;
+          const oh = obj.th * TILE * SCALE;
+          
+          if (nx < ox + ow && nx + CHAR_W > ox && ny < oy + oh && ny + CHAR_H > oy) {
+            nx = s.x;
+          }
+          if (s.x < ox + ow && s.x + CHAR_W > ox && ny < oy + oh && ny + CHAR_H > oy) {
+            ny = s.y;
+          }
         }
       }
 
@@ -167,7 +202,9 @@ const handleCanvasClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) =
       // Draw
       ctx.clearRect(0, 0, W, H);
       drawRoom(ctx, { scale: SCALE, tile: TILE, cols: COLS, rows: ROWS, ts, state: s });
-      drawCharacter(ctx, { x: s.x, y: s.y, scale: SCALE, tile: TILE, dir: s.dir, frame: s.frame, blinking: s.blinking });
+      
+      // Passa a flag sitting para o drawCharacter
+      drawCharacter(ctx, { x: s.x, y: s.y, scale: SCALE, tile: TILE, dir: s.dir, frame: s.frame, blinking: s.blinking, sitting: s.sitting });
 
       rafRef.current = requestAnimationFrame(loop);
     };
@@ -199,10 +236,10 @@ const handleCanvasClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) =
         <div
           className="absolute bottom-16 left-1/2 -translate-x-1/2 font-pixel text-[8px] z-20 pointer-events-none animate-float"
           style={{
-            color: 'hsl(var(--neon-orange))',
-            textShadow: '0 0 8px hsl(var(--neon-orange))',
-            backgroundColor: 'rgba(13,27,42,0.85)',
-            border: '2px solid hsl(var(--neon-orange))',
+            color: 'hsl(var(--neon-cyan, #00e5ff))',
+            textShadow: '0 0 8px #00e5ff',
+            backgroundColor: 'rgba(9,10,15,0.85)',
+            border: '2px solid #00e5ff',
             padding: '6px 12px',
             letterSpacing: '1px',
           }}
